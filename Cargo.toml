@@ -19,3 +19,4 @@ tokio-stream = "0.1.17"
 uuid = {version = "1.16.0", features = ["serde", "v4"]}
 dashmap = "6.1.0"
 async-stream = "0.3.6"
+clap = { version = "4.5.38", features = ["derive"] }
