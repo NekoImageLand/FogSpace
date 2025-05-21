@@ -25,9 +25,14 @@ impl HandlerCtx {
         }
     }
 
-    pub fn start_task(&self) -> (Arc<AtomicBool>, crossbeam_channel::Sender<ProgressData>) {
+    pub fn task<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(Arc<AtomicBool>, crossbeam_channel::Sender<ProgressData>) -> R,
+    {
         let signal = Arc::new(AtomicBool::new(false));
         self.space.tasks.insert(self.uuid, signal.clone());
-        (signal, self.process_sender.clone())
+        let result = f(signal.clone(), self.process_sender.clone());
+        self.space.tasks.remove(&self.uuid);
+        result
     }
 }

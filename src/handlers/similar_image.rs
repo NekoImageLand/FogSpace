@@ -39,37 +39,38 @@ impl HandlerCtx {
             thread::Builder::new()
                 .stack_size(8 * 1024 * 1024)
                 .spawn(move || {
-                    let (stop_signal, process_sender) = self.start_task();
-                    let mut op = SimilarImages::new(params);
-                    RAYON_INIT.call_once(|| {
-                        set_number_of_threads(req.common_items.thread_number as usize); // TODO: only once
-                    });
-                    // #region set_common_settings
-                    let included_directories = req.common_items.directories.to_pathbufs();
-                    op.set_included_directory(included_directories);
-                    if let Some(ref ed) = req.common_items.excluded_directories {
-                        op.set_excluded_directory(ed.to_pathbufs());
-                    }
-                    if let Some(ei) = req.common_items.excluded_items {
-                        op.set_excluded_items(ei);
-                    }
-                    op.set_recursive_search(req.common_items.is_recursive);
-                    if let Some(ae) = req.common_items.allowed_extensions {
-                        op.set_allowed_extensions(ae.join(","));
-                    }
-                    op.set_use_cache(req.common_items.use_cache);
-                    // #endregion set_common_settings
-                    op.set_minimal_file_size(req.minimal_file_size);
-                    op.set_maximal_file_size(req.maximal_file_size);
-                    op.set_delete_method(req.delete_method);
-                    op.set_dry_run(req.dry_run);
+                    self.task(|stop_signal, process_sender| {
+                        let mut op = SimilarImages::new(params);
+                        RAYON_INIT.call_once(|| {
+                            set_number_of_threads(req.common_items.thread_number as usize); // TODO: only once
+                        });
+                        // #region set_common_settings
+                        let included_directories = req.common_items.directories.to_pathbufs();
+                        op.set_included_directory(included_directories);
+                        if let Some(ref ed) = req.common_items.excluded_directories {
+                            op.set_excluded_directory(ed.to_pathbufs());
+                        }
+                        if let Some(ei) = req.common_items.excluded_items {
+                            op.set_excluded_items(ei);
+                        }
+                        op.set_recursive_search(req.common_items.is_recursive);
+                        if let Some(ae) = req.common_items.allowed_extensions {
+                            op.set_allowed_extensions(ae.join(","));
+                        }
+                        op.set_use_cache(req.common_items.use_cache);
+                        // #endregion set_common_settings
+                        op.set_minimal_file_size(req.minimal_file_size);
+                        op.set_maximal_file_size(req.maximal_file_size);
+                        op.set_delete_method(req.delete_method);
+                        op.set_dry_run(req.dry_run);
 
-                    op.find_similar_images(Some(&stop_signal), Some(&process_sender));
-                    let text_message = op.get_text_messages().create_messages_text();
-                    TaskInnerResult::<SimilarImages> {
-                        msg: Some(text_message),
-                        op,
-                    }
+                        op.find_similar_images(Some(&stop_signal), Some(&process_sender));
+                        let text_message = op.get_text_messages().create_messages_text();
+                        TaskInnerResult::<SimilarImages> {
+                            msg: Some(text_message),
+                            op,
+                        }
+                    })
                 });
         calculate_thread
             .map_err(|_| FogSpaceError {
