@@ -21,6 +21,16 @@ where
     },
     Error {
         task_id: Uuid,
-        msg: String,
+        #[serde(flatten)]
+        error: TaskError,
     },
+}
+
+#[derive(Serialize)]
+#[serde(tag = "error_code", content = "msg")]
+pub enum TaskError {
+    #[serde(rename = "418")]
+    Canceled(String),
+    #[serde(rename = "500")]
+    Internal(String),
 }

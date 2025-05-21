@@ -2,10 +2,10 @@ use crate::context::FogSpaceCtx;
 use crate::errors::FogSpaceError;
 use crate::handlers::HandlerCtx;
 use crate::models::common_params::{CommonParams, DeleteMethodRef, SimilarityPresetDef};
-use crate::models::task_session::TaskStatus;
+use crate::models::task_session::{TaskError, TaskStatus};
 use crate::routers::bridge_crossbeam_to_tokio;
 use async_stream::stream;
-use czkawka_core::common_tool::DeleteMethod;
+use czkawka_core::common_tool::{CommonData, DeleteMethod};
 use czkawka_core::progress_data::ProgressData;
 use czkawka_core::tools::similar_images::{ImagesEntry, SimilarityPreset};
 use image::imageops::FilterType;
@@ -75,9 +75,16 @@ pub async fn similar_image_task(
         }
         match done_rx.await {
             Ok(Ok(inner_res_enum)) => {
-                let status = TaskStatus::Processed {
-                    task_id: req_uuid,
-                    result: inner_res_enum.to_ref_result(),
+                let status = if inner_res_enum.op.get_stopped_search() {
+                    TaskStatus::Error {
+                        task_id: req_uuid,
+                        error: TaskError::Canceled("User canceled the task!".to_string())
+                    }
+                } else {
+                    TaskStatus::Processed {
+                        task_id: req_uuid,
+                        result: inner_res_enum.to_ref_result(),
+                    }
                 };
                 let evt = SseEvent::default().json(&status).unwrap();
                 yield Ok(evt);
@@ -85,7 +92,7 @@ pub async fn similar_image_task(
             Ok(Err(e)) => {
                 let status: TaskStatus<'_, Vec<Vec<ImagesEntry>>> = TaskStatus::Error {
                     task_id: req_uuid,
-                    msg: e.to_string(),
+                    error: TaskError::Internal(e.to_string())
                 };
                 let evt = SseEvent::default().json(&status).unwrap();
                 yield Ok(evt);
@@ -93,7 +100,7 @@ pub async fn similar_image_task(
             Err(join_err) => {
                 let status: TaskStatus<'_, Vec<Vec<ImagesEntry>>> = TaskStatus::Error {
                     task_id: req_uuid,
-                    msg: format!("failed to receive result: {join_err}"),
+                    error: TaskError::Internal(format!("failed to receive result: {join_err}"))
                 };
                 let evt = SseEvent::default().json(&status).unwrap();
                 yield Ok(evt);
