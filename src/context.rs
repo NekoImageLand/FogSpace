@@ -1,3 +1,4 @@
+use crate::errors::FogSpaceError;
 use dashmap::DashMap;
 use salvo::Depot;
 use std::sync::Arc;
@@ -10,14 +11,13 @@ pub struct FogSpaceCtx {
 }
 
 impl FogSpaceCtx {
-    pub fn get(depot: &mut Depot) -> Self {
-        match depot.obtain::<FogSpaceCtx>() {
-            Ok(ctx_ref) => ctx_ref.clone(),
-            Err(_) => {
-                let ctx = FogSpaceCtx::default();
-                depot.inject(ctx.clone());
-                ctx
-            }
-        }
+    pub fn get(depot: &mut Depot) -> Result<Arc<Self>, FogSpaceError> {
+        depot
+            .obtain::<Arc<FogSpaceCtx>>()
+            .map_err(|_| FogSpaceError {
+                code: salvo::http::StatusCode::INTERNAL_SERVER_ERROR,
+                message: "failed to obtain FogSpaceCtx".to_string(),
+            })
+            .cloned()
     }
 }

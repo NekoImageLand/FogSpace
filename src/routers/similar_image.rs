@@ -3,6 +3,7 @@ use crate::errors::FogSpaceError;
 use crate::handlers::HandlerCtx;
 use crate::models::common_params::{CommonParams, DeleteMethodRef, SimilarityPresetDef};
 use crate::models::task_session::TaskStatus;
+use crate::routers::bridge_crossbeam_to_tokio;
 use async_stream::stream;
 use czkawka_core::common_tool::DeleteMethod;
 use czkawka_core::progress_data::ProgressData;
@@ -44,7 +45,7 @@ pub struct SearchParams {
 }
 
 #[handler]
-pub async fn similar_image(
+pub async fn similar_image_task(
     req: &mut Request,
     res: &mut Response,
     depot: &mut Depot,
@@ -56,23 +57,21 @@ pub async fn similar_image(
     tracing::debug!("search handle! params: {:?}", params);
     let (progress_tx, progress_rx) = crossbeam_channel::unbounded::<ProgressData>();
     let req_uuid = Uuid::new_v4();
-    let fog_ctx = FogSpaceCtx::get(depot);
+    let fog_ctx = FogSpaceCtx::get(depot)?;
     let handler_ctx = HandlerCtx::new(fog_ctx, progress_tx, req_uuid);
     let (done_tx, done_rx) = oneshot::channel::<Result<_, FogSpaceError>>();
     tokio::task::spawn_blocking(move || {
         let r = handler_ctx.calculate_similar_image(params);
         let _ = done_tx.send(r);
     });
-
-    let mut progress_iter = progress_rx.into_iter();
+    let mut tokio_progress_rx = bridge_crossbeam_to_tokio(progress_rx);
     let event_stream = stream! {
-        for progress in progress_iter.by_ref() {
-            let status: TaskStatus<'_, Vec<Vec<ImagesEntry>>> = TaskStatus::Processing {
+        while let Some(progress) = tokio_progress_rx.recv().await {
+            let status: TaskStatus<'_, Vec<Vec<ImagesEntry>>>  = TaskStatus::Processing {
                 task_id: req_uuid,
                 progress_data: progress,
             };
-            let evt = SseEvent::default().json(&status).unwrap();
-            yield Ok::<_, Infallible>(evt);
+            yield Ok::<_, Infallible>(SseEvent::default().json(&status).unwrap());
         }
         match done_rx.await {
             Ok(Ok(inner_res_enum)) => {

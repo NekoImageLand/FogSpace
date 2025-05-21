@@ -8,13 +8,13 @@ pub mod similar_image;
 
 pub struct HandlerCtx {
     uuid: Uuid,
-    space: FogSpaceCtx,
+    space: Arc<FogSpaceCtx>,
     process_sender: crossbeam_channel::Sender<ProgressData>,
 }
 
 impl HandlerCtx {
     pub fn new(
-        space: FogSpaceCtx,
+        space: Arc<FogSpaceCtx>,
         process_sender: crossbeam_channel::Sender<ProgressData>,
         uuid: Uuid,
     ) -> Self {
